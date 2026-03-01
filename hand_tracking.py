@@ -21,7 +21,6 @@ def starte_master_steuerung():
     mac = MacController()
     
 
-
     while True:
         erfolg, bild = kamera.read()
         if not erfolg:
@@ -30,6 +29,11 @@ def starte_master_steuerung():
         bild = cv2.flip(bild, 1)
         h, w, c = bild.shape
         bild_rgb = cv2.cvtColor(bild, cv2.COLOR_BGR2RGB)
+        
+        rand_x = int(w * 0.2)
+        rand_y = int(h * 0.2)
+        cv2.rectangle(bild, (rand_x, rand_y), (w - rand_x, h - rand_y), (150, 150, 150), 2)
+
         ergebnisse = hands.process(bild_rgb)
 
         if ergebnisse.multi_hand_landmarks:
@@ -38,10 +42,32 @@ def starte_master_steuerung():
                 
             geste, daten = erkennung.erkenne_geste(ergebnisse.multi_hand_landmarks, w, h)
             
-            if geste == "PLAY_PAUSE":
+            if geste == "WAITING":
+                ziel_geste, zusatz_daten = daten
+                if ziel_geste == "APP_SWITCH":
+                    cv2.putText(bild, f"Lade Wechsel ({zusatz_daten} Apps)...", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 165, 255), 3)
+                else:
+                    cv2.putText(bild, f"Lade {ziel_geste}...", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 165, 255), 3)
+            
+            elif geste == "APP_SWITCH":
+                anzahl = daten
+                mac.app_wechseln(anzahl)
+                cv2.putText(bild, f"APP WECHSEL ({anzahl})", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 100, 255), 3)
+
+            elif geste == "EATING_MODE":
+                x, y = daten
+                cv2.circle(bild, (x, y), 25, (0, 0, 255), cv2.FILLED)
+                cv2.line(bild, (x - 15, y), (x + 15, y), (255, 255, 255), 4)
+                cv2.putText(bild, "STANDBY", (x - 40, y - 35), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            
+            elif geste == "PLAY_PAUSE":
                 mac.play_pause()
                 cv2.putText(bild, "PLAY / PAUSE", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 3)
                 
+            elif geste == "FULLSCREEN":
+                mac.vollbild()
+                cv2.putText(bild, "VOLLBILD!", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 3)
+
             elif geste == "YOUTUBE":
                 mac.youtube_oeffnen()
                 cv2.putText(bild, "YOUTUBE GEÖFFNET!", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 3)
@@ -52,7 +78,6 @@ def starte_master_steuerung():
                 
             elif geste in ["VOLUME_UP", "VOLUME_DOWN", "DRAW_DUAL_SLIDER"]:
                 x, y, y_ratio = daten
-                
                 if geste == "VOLUME_UP":
                     mac.lauter()
                     cv2.circle(bild, (x, y), 20, (0, 255, 0), cv2.FILLED) 
@@ -67,13 +92,11 @@ def starte_master_steuerung():
                 balken_start_y = int(h*3/4)
                 balken_ende_y = int(h/4)
                 balken_aktuelle_y = int(balken_start_y - fuell_prozent * (balken_start_y - balken_ende_y))
-                
                 cv2.rectangle(bild, (50, balken_aktuelle_y), (85, balken_start_y), (0, 255, 0), cv2.FILLED)
                 cv2.putText(bild, "VOL", (45, balken_start_y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
                     
             elif geste in ["SCROLL_UP", "SCROLL_DOWN", "DRAW_SCROLL_SLIDER"]:
                 x, y, y_ratio = daten
-                
                 if geste == "SCROLL_UP":
                     mac.scroll_hoch()
                     cv2.circle(bild, (x, y), 20, (255, 0, 0), cv2.FILLED) 
@@ -88,7 +111,6 @@ def starte_master_steuerung():
                 balken_start_y = int(h*3/4)
                 balken_ende_y = int(h/4)
                 balken_aktuelle_y = int(balken_start_y - fuell_prozent * (balken_start_y - balken_ende_y))
-                
                 cv2.rectangle(bild, (w - 85, balken_aktuelle_y), (w - 50, balken_start_y), (255, 0, 0), cv2.FILLED)
                 cv2.putText(bild, "SCR", (w - 90, balken_start_y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 

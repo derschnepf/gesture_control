@@ -1,5 +1,6 @@
 import pyautogui
 import os
+import time
 
 class MacController:
     def __init__(self):
@@ -34,3 +35,13 @@ class MacController:
 
     def scroll_runter(self):
         pyautogui.scroll(-20)
+
+    def vollbild(self):
+        pyautogui.press('f')
+
+    def app_wechseln(self, anzahl):
+        pyautogui.keyDown('command')
+        for _ in range(anzahl):
+            pyautogui.press('tab')
+            time.sleep(0.05)
+        pyautogui.keyUp('command')
