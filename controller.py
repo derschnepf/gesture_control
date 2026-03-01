@@ -17,11 +17,20 @@ class MacController:
     def play_pause(self):
         pyautogui.press('space')
 
-    def screenshot_machen(self):
-        pyautogui.hotkey('command', 'shift', '3')
+    def youtube_oeffnen(self):
+        os.system("open -a 'Brave Browser' 'https://www.youtube.com'")
+
+    def whatsapp_oeffnen(self):
+        os.system("open -a 'WhatsApp'")
 
     def lauter(self):
         os.system("osascript -e 'set volume output volume (output volume of (get volume settings) + 10)'")
 
     def leiser(self):
         os.system("osascript -e 'set volume output volume (output volume of (get volume settings) - 10)'")
+
+    def scroll_hoch(self):
+        pyautogui.scroll(20) 
+
+    def scroll_runter(self):
+        pyautogui.scroll(-20)
