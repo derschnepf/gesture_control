@@ -39,6 +39,7 @@ class MacController:
     def vollbild(self):
         pyautogui.press('f')
 
+
     def app_wechseln(self, anzahl):
         pyautogui.keyDown('command')
         for _ in range(anzahl):

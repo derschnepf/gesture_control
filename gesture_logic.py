@@ -21,6 +21,7 @@ class GestureRecognizer:
         erkannte_pose = "NONE"
         pose_daten = None
 
+
         if len(multi_hand_landmarks) == 2:
             hand1 = multi_hand_landmarks[0].landmark
             hand2 = multi_hand_landmarks[1].landmark
@@ -29,6 +30,7 @@ class GestureRecognizer:
                 linke_hand, rechte_hand = hand1, hand2
             else:
                 linke_hand, rechte_hand = hand2, hand1
+
 
             links_zeige = self._ist_finger_offen(linke_hand, 8, 6)
             links_mittel = self._ist_finger_offen(linke_hand, 12, 10)
@@ -39,6 +41,7 @@ class GestureRecognizer:
             links_zeige_und_mittel = links_zeige and links_mittel and not links_ring and not links_klein
             links_alle_offen = links_zeige and links_mittel and links_ring and links_klein
             
+
             rechts_zeige = self._ist_finger_offen(rechte_hand, 8, 6)
             rechts_mittel = self._ist_finger_offen(rechte_hand, 12, 10)
             rechts_ring = self._ist_finger_offen(rechte_hand, 16, 14)
@@ -46,6 +49,7 @@ class GestureRecognizer:
             rechts_daumen = abs(rechte_hand[4].x - rechte_hand[9].x) > abs(rechte_hand[3].x - rechte_hand[9].x)
             
             rechts_nur_zeige = rechts_zeige and not rechts_mittel and not rechts_ring and not rechts_klein
+
 
             if links_nur_zeige and rechts_nur_zeige:
                 self.aktuelle_geste = None 
@@ -64,6 +68,7 @@ class GestureRecognizer:
                     
                 return "DRAW_DUAL_SLIDER", (int(rechte_hand[8].x * w), int(rechte_hand[8].y * h), aktuelle_y_position)
             
+
             elif links_zeige_und_mittel and rechts_nur_zeige:
                 self.aktuelle_geste = None 
                 aktuelle_y_position = rechte_hand[8].y 
@@ -81,15 +86,19 @@ class GestureRecognizer:
                     
                 return "DRAW_SCROLL_SLIDER", (int(rechte_hand[8].x * w), int(rechte_hand[8].y * h), aktuelle_y_position)
             
+
             elif links_alle_offen:
+
                 anzahl_finger = [rechts_zeige, rechts_mittel, rechts_ring, rechts_klein, rechts_daumen].count(True)
                 if anzahl_finger > 0:
                     erkannte_pose = "APP_SWITCH"
                     pose_daten = anzahl_finger
             
+
             if erkannte_pose == "NONE":
                 self.start_y = None
                 return "NONE", None
+
 
         elif len(multi_hand_landmarks) == 1:
             self.start_y = None
@@ -119,6 +128,7 @@ class GestureRecognizer:
             elif zeigefinger_offen and not mittelfinger_offen and not ringfinger_offen and kleiner_finger_offen:
                 erkannte_pose = "ROCK"
 
+
             if erkannte_pose == "NONE":
                 self.aktuelle_geste = None 
                 
@@ -143,6 +153,7 @@ class GestureRecognizer:
                     return "CLICK", (avg_x, avg_y, x1, y1, x2, y2) 
                     
                 return "MOVE", (avg_x, avg_y) 
+
 
         if erkannte_pose != "NONE":
             ziel_wartezeit = 0.05 if erkannte_pose == "PLAY_PAUSE" else 0.6
