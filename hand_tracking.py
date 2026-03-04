@@ -1,95 +1,122 @@
 import cv2
 import mediapipe as mp
-import threading
-import rumps
-
+import pyautogui
+import os
+import time
 from gesture_logic import GestureRecognizer
-from controller import MacController
 
-class JediApp(rumps.App):
-    def __init__(self):
-        super(JediApp, self).__init__("🖐️ Jedi")
+def main():
+    pyautogui.FAILSAFE = False
+    screen_w, screen_h = pyautogui.size()
+    
+    mp_hands = mp.solutions.hands
+    mp_zeichnung = mp.solutions.drawing_utils
+    hands = mp_hands.Hands(
+        max_num_hands=2, 
+        min_detection_confidence=0.7, 
+        min_tracking_confidence=0.7
+    )
+    
+    recognizer = GestureRecognizer()
+    kamera = cv2.VideoCapture(0)
+    cmd_gedrueckt = False
+
+    while True:
+        erfolg, bild = kamera.read()
+        if not erfolg:
+            break
+            
+        bild = cv2.flip(bild, 1)
+        h, w, _ = bild.shape
+        bild_rgb = cv2.cvtColor(bild, cv2.COLOR_BGR2RGB)
         
-        self.erkennung = GestureRecognizer()
-        self.mac = MacController()
+        ergebnisse = hands.process(bild_rgb)
         
-        self.is_running = False
-        self.kamera_thread = None
-
-    @rumps.clicked("▶️ Kamera AN")
-    def start_kamera(self, _):
-        if not self.is_running:
-            self.is_running = True
-            self.kamera_thread = threading.Thread(target=self.kamera_loop)
-            self.kamera_thread.start()
-            self.title = "🟢 Jedi"
-            rumps.notification("Jedi Steuerung", "Aktiviert", "Die Handsteuerung läuft jetzt unsichtbar im Hintergrund.")
-
-    @rumps.clicked("⏹️ Kamera AUS")
-    def stop_kamera(self, _):
-        if self.is_running:
-            self.is_running = False
-            if self.kamera_thread:
-                self.kamera_thread.join()
-            self.title = "🖐️ Jedi"
-            rumps.notification("Jedi Steuerung", "Deaktiviert", "Die Kamera wurde gestoppt.")
-
-    def kamera_loop(self):
-        mp_hands = mp.solutions.hands
-        hands = mp_hands.Hands(
-            static_image_mode=False, max_num_hands=2,
-            min_detection_confidence=0.7, min_tracking_confidence=0.5
-        )
-
-        kamera = cv2.VideoCapture(0)
-        if not kamera.isOpened():
-            kamera = cv2.VideoCapture(1)
-
-
-        while self.is_running:
-            erfolg, bild = kamera.read()
-            if not erfolg:
-                break
-
-            bild = cv2.flip(bild, 1)
-            h, w, c = bild.shape
-            bild_rgb = cv2.cvtColor(bild, cv2.COLOR_BGR2RGB)
-            ergebnisse = hands.process(bild_rgb)
-
-            if ergebnisse.multi_hand_landmarks:
-                geste, daten = self.erkennung.erkenne_geste(ergebnisse.multi_hand_landmarks, w, h)
+        if ergebnisse.multi_hand_landmarks:
+            for hand_landmarks in ergebnisse.multi_hand_landmarks:
+                mp_zeichnung.draw_landmarks(bild, hand_landmarks, mp_hands.HAND_CONNECTIONS)
                 
+            geste, daten = recognizer.erkenne_geste(ergebnisse.multi_hand_landmarks, w, h)
+            
+            if geste == "APP_SWITCH":
+                if not cmd_gedrueckt:
+                    pyautogui.keyDown('command')
+                    pyautogui.press('tab')
+                    cmd_gedrueckt = True
+                    time.sleep(0.2)
+                else:
+                    pyautogui.press('tab')
+            elif cmd_gedrueckt and geste != "WAITING":
+                pyautogui.keyUp('command')
+                cmd_gedrueckt = False
+            
+            if geste == "MOVE":
+                x, y = daten
+                pyautogui.moveTo(x * screen_w, y * screen_h, _pause=False)
+            elif geste == "CLICK":
+                pyautogui.click()
+                
+            elif geste == "PLAY_PAUSE":
+                pyautogui.press('space')
+            elif geste == "FULLSCREEN":
+                pyautogui.press('f')
+            elif geste == "ROCK":
+                os.system('open -a "WhatsApp"') 
+                time.sleep(1)
+            elif geste == "YOUTUBE":
+                os.system('open -a "Brave Browser" "https://www.youtube.com"')
+                time.sleep(1)
+                
+            elif geste == "VIDEO_FORWARD":
+                pyautogui.press('right')
+            elif geste == "VIDEO_BACKWARD":
+                pyautogui.press('left')
+            elif geste == "VOLUME_UP":
+                os.system("osascript -e 'set volume output volume ((output volume of (get volume settings)) + 5)'")
+            elif geste == "VOLUME_DOWN":
+                os.system("osascript -e 'set volume output volume ((output volume of (get volume settings)) - 5)'")
+            elif geste == "SCROLL_UP":
+                pyautogui.scroll(10)
+            elif geste == "SCROLL_DOWN":
+                pyautogui.scroll(-10)
+                
+            elif geste == "LOCK_SCREEN":
+                os.system('''osascript -e 'tell application "System Events" to keystroke "q" using {control down, command down}' ''')
+                time.sleep(1)
+                
+            elif geste == "DRAW_DUAL_SLIDER":
+                x_pos, y_pos, _ = daten
+                cv2.putText(bild, "Lautstaerke", (x_pos, y_pos - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+                cv2.circle(bild, (x_pos, y_pos), 15, (255, 0, 0), cv2.FILLED)
+            elif geste == "DRAW_SCROLL_SLIDER":
+                x_pos, y_pos, _ = daten
+                cv2.putText(bild, "Scrollen", (x_pos, y_pos - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                cv2.circle(bild, (x_pos, y_pos), 15, (0, 255, 0), cv2.FILLED)
+            elif geste == "DRAW_SCRUB_SLIDER":
+                x_pos, y_pos, _ = daten
+                cv2.putText(bild, "Spulen", (x_pos, y_pos - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                cv2.circle(bild, (x_pos, y_pos), 15, (0, 0, 255), cv2.FILLED)
+            
+            if geste not in ["NONE", "WAITING", "MOVE"] and not str(geste).startswith("DRAW"):
+                cv2.putText(bild, f"Aktion: {geste}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        
+        else:
+            if cmd_gedrueckt:
+                pyautogui.keyUp('command')
+                cmd_gedrueckt = False
 
-                if geste == "APP_SWITCH":
-                    self.mac.app_wechseln(daten)
-                elif geste == "PLAY_PAUSE":
-                    self.mac.play_pause()
-                elif geste == "FULLSCREEN":
-                    self.mac.vollbild()
-                elif geste == "YOUTUBE":
-                    self.mac.youtube_oeffnen()
-                elif geste == "ROCK":
-                    self.mac.whatsapp_oeffnen()
-                elif geste == "VOLUME_UP":
-                    self.mac.lauter()
-                elif geste == "VOLUME_DOWN":
-                    self.mac.leiser()
-                elif geste == "SCROLL_UP":
-                    self.mac.scroll_hoch()
-                elif geste == "SCROLL_DOWN":
-                    self.mac.scroll_runter()
-                elif geste == "CLICK":
-                    mx, my, x1, y1, x2, y2 = daten
-                    self.mac.maus_bewegen(mx, my)
-                    self.mac.klicken()
-                elif geste == "MOVE":
-                    mx, my = daten
-                    self.mac.maus_bewegen(mx, my)
+        if recognizer.letzte_ki_vorhersage:
+            cv2.putText(bild, recognizer.letzte_ki_vorhersage, (10, h - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
-        kamera.release()
-        hands.close()
+        cv2.imshow("Jedi Control Center", bild)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+            
+    if cmd_gedrueckt:
+        pyautogui.keyUp('command')
+    kamera.release()
+    cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-
-    app = JediApp()
-    app.run()
+    main()

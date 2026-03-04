@@ -7,7 +7,6 @@ class MacController:
         pyautogui.FAILSAFE = False
         self.bildschirm_breite, self.bildschirm_hoehe = pyautogui.size()
         
-        # SICHERHEITS-RESET
         pyautogui.keyUp('command')
         pyautogui.keyUp('ctrl')
         pyautogui.keyUp('shift')
