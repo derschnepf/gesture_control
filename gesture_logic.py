@@ -1,15 +1,36 @@
 import math
 import time
 from collections import deque
+import pickle
+import pandas as pd
+import warnings
+
+# Verhindert Warnmeldungen im Terminal
+warnings.filterwarnings("ignore")
 
 class GestureRecognizer:
     def __init__(self):
         self.letzte_aktion_zeit = 0
         self.start_y = None
+        self.start_x = None 
         self.maus_historie = deque(maxlen=7) 
         
         self.aktuelle_geste = None
+        self.gesten_daten = None 
         self.gesten_start_zeit = 0
+
+        # === KI-MODELL LADEN ===
+        try:
+            with open('gesten_modell.pkl', 'rb') as f:
+                self.ki_modell = pickle.load(f)
+            self.spalten = []
+            for i in range(21):
+                self.spalten.extend([f'x{i}', f'y{i}', f'z{i}'])
+            self.ki_aktiv = True
+            print("✅ KI-Gehirn erfolgreich geladen!")
+        except Exception as e:
+            print("⚠️ KI-Modell nicht gefunden! Fallback auf alte Logik.")
+            self.ki_aktiv = False
         
     def _ist_finger_offen(self, lm, spitze, gelenk):
         return lm[spitze].y < lm[gelenk].y
@@ -21,8 +42,12 @@ class GestureRecognizer:
         erkannte_pose = "NONE"
         pose_daten = None
 
-
+        # ==========================================
+        # ZWEI-HÄNDE-LOGIK 
+        # ==========================================
         if len(multi_hand_landmarks) == 2:
+            # ❌ FEHLER BEHOBEN: Der gnadenlose "self.aktuelle_geste = None" Reset wurde hier gelöscht!
+            
             hand1 = multi_hand_landmarks[0].landmark
             hand2 = multi_hand_landmarks[1].landmark
 
@@ -31,7 +56,6 @@ class GestureRecognizer:
             else:
                 linke_hand, rechte_hand = hand2, hand1
 
-
             links_zeige = self._ist_finger_offen(linke_hand, 8, 6)
             links_mittel = self._ist_finger_offen(linke_hand, 12, 10)
             links_ring = self._ist_finger_offen(linke_hand, 16, 14)
@@ -39,25 +63,23 @@ class GestureRecognizer:
             
             links_nur_zeige = links_zeige and not links_mittel and not links_ring and not links_klein
             links_zeige_und_mittel = links_zeige and links_mittel and not links_ring and not links_klein
-            links_alle_offen = links_zeige and links_mittel and links_ring and links_klein
+            links_alle_offen = links_zeige and links_mittel and links_ring and links_klein 
             
-
+            luecke_mittel_ring = math.hypot(linke_hand[12].x - linke_hand[16].x, linke_hand[12].y - linke_hand[16].y)
+            links_vulcan = links_alle_offen and (luecke_mittel_ring > 0.06)
+            
             rechts_zeige = self._ist_finger_offen(rechte_hand, 8, 6)
             rechts_mittel = self._ist_finger_offen(rechte_hand, 12, 10)
             rechts_ring = self._ist_finger_offen(rechte_hand, 16, 14)
             rechts_klein = self._ist_finger_offen(rechte_hand, 20, 18)
-            rechts_daumen = abs(rechte_hand[4].x - rechte_hand[9].x) > abs(rechte_hand[3].x - rechte_hand[9].x)
             
             rechts_nur_zeige = rechts_zeige and not rechts_mittel and not rechts_ring and not rechts_klein
 
-
             if links_nur_zeige and rechts_nur_zeige:
-                self.aktuelle_geste = None 
                 aktuelle_y_position = rechte_hand[8].y 
                 if self.start_y is None:
                     self.start_y = aktuelle_y_position
                     return "DRAW_DUAL_SLIDER", (int(rechte_hand[8].x * w), int(rechte_hand[8].y * h), aktuelle_y_position)
-                    
                 differenz = self.start_y - aktuelle_y_position
                 if differenz > 0.04: 
                     self.start_y = aktuelle_y_position
@@ -65,17 +87,13 @@ class GestureRecognizer:
                 elif differenz < -0.04:
                     self.start_y = aktuelle_y_position
                     return "VOLUME_DOWN", (int(rechte_hand[8].x * w), int(rechte_hand[8].y * h), aktuelle_y_position)
-                    
                 return "DRAW_DUAL_SLIDER", (int(rechte_hand[8].x * w), int(rechte_hand[8].y * h), aktuelle_y_position)
             
-
             elif links_zeige_und_mittel and rechts_nur_zeige:
-                self.aktuelle_geste = None 
                 aktuelle_y_position = rechte_hand[8].y 
                 if self.start_y is None:
                     self.start_y = aktuelle_y_position
                     return "DRAW_SCROLL_SLIDER", (int(rechte_hand[8].x * w), int(rechte_hand[8].y * h), aktuelle_y_position)
-                    
                 differenz = self.start_y - aktuelle_y_position
                 if differenz > 0.04:  
                     self.start_y = aktuelle_y_position
@@ -83,51 +101,90 @@ class GestureRecognizer:
                 elif differenz < -0.04: 
                     self.start_y = aktuelle_y_position
                     return "SCROLL_DOWN", (int(rechte_hand[8].x * w), int(rechte_hand[8].y * h), aktuelle_y_position)
-                    
                 return "DRAW_SCROLL_SLIDER", (int(rechte_hand[8].x * w), int(rechte_hand[8].y * h), aktuelle_y_position)
-            
+
+            elif links_vulcan and rechts_nur_zeige:
+                aktuelle_x_position = rechte_hand[8].x 
+                if self.start_x is None:
+                    self.start_x = aktuelle_x_position
+                    return "DRAW_SCRUB_SLIDER", (int(rechte_hand[8].x * w), int(rechte_hand[8].y * h), aktuelle_x_position)
+                differenz = aktuelle_x_position - self.start_x
+                if differenz > 0.05:  
+                    self.start_x = aktuelle_x_position
+                    return "VIDEO_FORWARD", (int(rechte_hand[8].x * w), int(rechte_hand[8].y * h), aktuelle_x_position)
+                elif differenz < -0.05: 
+                    self.start_x = aktuelle_x_position
+                    return "VIDEO_BACKWARD", (int(rechte_hand[8].x * w), int(rechte_hand[8].y * h), aktuelle_x_position)
+                return "DRAW_SCRUB_SLIDER", (int(rechte_hand[8].x * w), int(rechte_hand[8].y * h), aktuelle_x_position)
 
             elif links_alle_offen:
-
-                anzahl_finger = [rechts_zeige, rechts_mittel, rechts_ring, rechts_klein, rechts_daumen].count(True)
+                anzahl_finger = [rechts_zeige, rechts_mittel, rechts_ring, rechts_klein].count(True)
                 if anzahl_finger > 0:
                     erkannte_pose = "APP_SWITCH"
                     pose_daten = anzahl_finger
             
-
             if erkannte_pose == "NONE":
                 self.start_y = None
+                self.start_x = None
+                self.aktuelle_geste = None # Timer-Reset nur, wenn WIRKLICH keine 2-Hand-Geste da ist
                 return "NONE", None
 
-
+        # ==========================================
+        # EIN-HAND-LOGIK 
+        # ==========================================
         elif len(multi_hand_landmarks) == 1:
             self.start_y = None
-            lm = multi_hand_landmarks[0].landmark
+            self.start_x = None
+            hand_landmarks = multi_hand_landmarks[0]
+            lm = hand_landmarks.landmark
             
-            handgelenk_y = lm[0].y
-            mittelhand_y = lm[9].y
-            ist_hand_aufrecht = (handgelenk_y - mittelhand_y) > 0.12 
-            
-            if not ist_hand_aufrecht:
-                self.aktuelle_geste = None 
-                return "EATING_MODE", (int(lm[9].x * w), int(lm[9].y * h))
+            # --- KI BERECHNUNG ---
+            ki_geste = "Neutral"
+            ki_sicherheit = 0
+            if self.ki_aktiv:
+                handgelenk = lm[0]
+                mittelhand = lm[9]
+                
+                massstab = math.hypot(mittelhand.x - handgelenk.x, mittelhand.y - handgelenk.y)
+                if massstab < 0.0001: massstab = 0.0001
 
-            zeigefinger_offen = self._ist_finger_offen(lm, 8, 6)
-            mittelfinger_offen = self._ist_finger_offen(lm, 12, 10)
-            ringfinger_offen = self._ist_finger_offen(lm, 16, 14)
-            kleiner_finger_offen = self._ist_finger_offen(lm, 20, 18)
-            daumen_abgespreizt = abs(lm[4].x - lm[9].x) > abs(lm[3].x - lm[9].x)
-            daumen_zeigt_hoch = daumen_abgespreizt and (lm[4].y < (lm[5].y - 0.02))
+                koordinaten = []
+                for punkt in lm:
+                    rel_x = (punkt.x - handgelenk.x) / massstab
+                    rel_y = (punkt.y - handgelenk.y) / massstab
+                    rel_z = (punkt.z - handgelenk.z) / massstab
+                    koordinaten.extend([rel_x, rel_y, rel_z])
+                
+                df = pd.DataFrame([koordinaten], columns=self.spalten)
+                ki_geste = self.ki_modell.predict(df)[0]
+                ki_sicherheit = self.ki_modell.predict_proba(df).max() * 100
 
-            if not daumen_abgespreizt and not zeigefinger_offen and not mittelfinger_offen and not ringfinger_offen and not kleiner_finger_offen:
-                erkannte_pose = "PLAY_PAUSE"
-            elif daumen_zeigt_hoch and not zeigefinger_offen and not mittelfinger_offen and not ringfinger_offen and not kleiner_finger_offen:
+            is_daumen = (ki_geste == "Daumen_Hoch" and ki_sicherheit > 50.0)
+
+            # --- ENTSCHEIDUNG ---
+            if is_daumen:
                 erkannte_pose = "FULLSCREEN"
-            elif daumen_abgespreizt and not zeigefinger_offen and not mittelfinger_offen and not ringfinger_offen and kleiner_finger_offen:
-                erkannte_pose = "YOUTUBE"
-            elif zeigefinger_offen and not mittelfinger_offen and not ringfinger_offen and kleiner_finger_offen:
-                erkannte_pose = "ROCK"
+            else:
+                handgelenk_y = lm[0].y
+                mittelhand_y = lm[9].y
+                ist_hand_aufrecht = (handgelenk_y - mittelhand_y) > 0.12 
+                
+                if not ist_hand_aufrecht:
+                    self.aktuelle_geste = None 
+                    return "EATING_MODE", (int(lm[9].x * w), int(lm[9].y * h))
 
+                zeigefinger_offen = self._ist_finger_offen(lm, 8, 6)
+                mittelfinger_offen = self._ist_finger_offen(lm, 12, 10)
+                ringfinger_offen = self._ist_finger_offen(lm, 16, 14)
+                kleiner_finger_offen = self._ist_finger_offen(lm, 20, 18)
+                daumen_abgespreizt = abs(lm[4].x - lm[9].x) > abs(lm[3].x - lm[9].x)
+
+                if not daumen_abgespreizt and not zeigefinger_offen and not mittelfinger_offen and not ringfinger_offen and not kleiner_finger_offen:
+                    erkannte_pose = "PLAY_PAUSE"
+                elif daumen_abgespreizt and not zeigefinger_offen and not mittelfinger_offen and not ringfinger_offen and kleiner_finger_offen:
+                    erkannte_pose = "YOUTUBE"
+                elif zeigefinger_offen and not mittelfinger_offen and not ringfinger_offen and kleiner_finger_offen:
+                    erkannte_pose = "ROCK"
 
             if erkannte_pose == "NONE":
                 self.aktuelle_geste = None 
@@ -148,21 +205,27 @@ class GestureRecognizer:
                 x1, y1 = int(lm[4].x * w), int(lm[4].y * h)
                 x2, y2 = int(lm[8].x * w), int(lm[8].y * h)
                 
-                if math.hypot(x2 - x1, y2 - y1) < 30 and (aktuelle_zeit - self.letzte_aktion_zeit > 0.3):
+                abstand = math.hypot(x2 - x1, y2 - y1)
+                
+                if abstand < 30 and (aktuelle_zeit - self.letzte_aktion_zeit > 0.3):
                     self.letzte_aktion_zeit = aktuelle_zeit
                     return "CLICK", (avg_x, avg_y, x1, y1, x2, y2) 
                     
                 return "MOVE", (avg_x, avg_y) 
 
-
+        # ==========================================
+        # TIMER-LOGIK
+        # ==========================================
         if erkannte_pose != "NONE":
             ziel_wartezeit = 0.05 if erkannte_pose == "PLAY_PAUSE" else 0.6
             
             if self.aktuelle_geste != erkannte_pose:
                 self.aktuelle_geste = erkannte_pose
+                self.gesten_daten = pose_daten
                 self.gesten_start_zeit = aktuelle_zeit
                 return "WAITING", (erkannte_pose, pose_daten) 
             else:
+                self.gesten_daten = pose_daten
                 wartezeit = aktuelle_zeit - self.gesten_start_zeit
                 if wartezeit >= ziel_wartezeit: 
                     if cooldown_vorbei:
