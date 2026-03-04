@@ -6,6 +6,11 @@ class MacController:
     def __init__(self):
         pyautogui.FAILSAFE = False
         self.bildschirm_breite, self.bildschirm_hoehe = pyautogui.size()
+        
+        # SICHERHEITS-RESET
+        pyautogui.keyUp('command')
+        pyautogui.keyUp('ctrl')
+        pyautogui.keyUp('shift')
 
     def maus_bewegen(self, x_ratio, y_ratio):
         maus_x = int(x_ratio * self.bildschirm_breite)
@@ -39,10 +44,12 @@ class MacController:
     def vollbild(self):
         pyautogui.press('f')
 
-
     def app_wechseln(self, anzahl):
-        pyautogui.keyDown('command')
+        pyautogui.keyDown('command') 
+        time.sleep(0.2) 
+        
         for _ in range(anzahl):
-            pyautogui.press('tab')
-            time.sleep(0.05)
+            pyautogui.press('tab')   
+            time.sleep(0.3) 
+            
         pyautogui.keyUp('command')
